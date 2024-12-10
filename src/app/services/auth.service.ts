@@ -7,19 +7,41 @@ import {
     signOut,
     authState,
 } from '@angular/fire/auth';
-import { doc, Firestore, setDoc } from '@angular/fire/firestore';
+import { doc, Firestore, Unsubscribe, onSnapshot, setDoc } from '@angular/fire/firestore';
 import { map, Observable } from 'rxjs';
 import { UserDTO } from '../models/user.model';
+import { Store } from '@ngrx/store';
+import { AppState } from '../app.reducer';
+import * as authActions from '../auth/auth.actions';
 
 @Injectable({
     providedIn: 'root',
 })
 export class AuthService {
-    constructor(private _auth: Auth, private _fireStore: Firestore) {}
+    private _userUnsubscribe!: Unsubscribe;
+    constructor(
+        private _auth: Auth,
+        private _fireStore: Firestore,
+        private _store: Store<AppState>
+    ) {}
 
     initAuthListener() {
         authState(this._auth).subscribe((fuser) => {
-            console.log('Firebase user: ', fuser);
+            if (fuser) {
+                this._userUnsubscribe = onSnapshot(
+                    doc(this._fireStore, fuser.uid, 'user'),
+                    (docUser) => {
+                        const user = docUser.data() as UserDTO;
+                        this._store.dispatch(authActions.setUser({ user }));
+                    },
+                    (error) => {
+                        console.error('Error on init auth listener: ', error);
+                    }
+                );
+            } else {
+                if (this._userUnsubscribe) this._userUnsubscribe();
+                this._store.dispatch(authActions.unSetUser());
+            }
         });
     }
 
